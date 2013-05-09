@@ -25,6 +25,7 @@ license as described in the file LICENSE.
 #include "lda_core.h"
 #include "noop.h"
 #include "gd_mf.h"
+#include "mf.h"
 #include "vw.h"
 #include "rand48.h"
 #include "parse_args.h"
@@ -481,7 +482,7 @@ vw* parse_args(int argc, char *argv[])
     all->l = NOOP::setup(*all);
   
   if (all->rank != 0) 
-    all->l = GDMF::setup(*all);
+    all->l = MF::setup(*all);
 
   all->loss = getLossFunction(all, loss_function, (float)loss_parameter);
 
