@@ -585,7 +585,7 @@ void save_load_regressor(vw& all, io_buf& model_file, bool read, bool text)
 void save_load_online_state(vw& all, io_buf& model_file, bool read, bool text)
 {
   char buff[512];
-  
+
   uint32_t text_len = sprintf(buff, "initial_t %f\n", all.initial_t);
   bin_text_read_write_fixed(model_file,(char*)&all.initial_t, sizeof(all.initial_t), 
 			    "", read, 

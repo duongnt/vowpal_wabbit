@@ -24,6 +24,12 @@
 using namespace std;
 
 namespace MF {
+
+struct mf {
+	learner base;
+	vw* all;
+};
+
 void mf_local_predict(example* ec, regressor& reg);
 
 float mf_inline_predict(vw& all, example* &ec) {
@@ -54,6 +60,7 @@ float mf_inline_predict(vw& all, example* &ec) {
 				// l^k is from index+1 to index+all.rank
 				//float x_dot_l = sd_offset_add(weights, mask, ec->atomics[(int)(*i)[0]].begin, ec->atomics[(int)(*i)[0]].end, k);
 				float x_dot_l = 0;
+
 				GD::foreach_feature<vec_add>(all, &x_dot_l,
 						ec->atomics[(int) (*i)[0]].begin,
 						ec->atomics[(int) (*i)[0]].end, k);
@@ -273,48 +280,77 @@ void save_load(void* d, io_buf& model_file, bool read, bool text) {
 }
 
 void learn_with_output(void* d, example* ec, bool shouldOutput) {
-	vw* all = (vw*)d;
+	mf* data = (mf*) d;
+	vw* all = data->all;
 
 	if (command_example(all, ec)) {
-		all->l.learn(ec);
+		data->base.learn(ec);
 		return;
 	}
 
 	size_t mask = all->reg.weight_mask;
-	mf_inline_predict(*all, ec);
 
-	//Save the Pairs
-	vector<string> pairs;
+	cout << "Label: " << ((label_data*) ec->ld)->label << endl;
+	cout << "Pred before any learning: " << mf_inline_predict(*all, ec) << endl;
+
+	float constant = 0;
+	// calculate constant for linear part
 	for (vector<string>::iterator i = all->pairs.begin(); i != all->pairs.end();
 			i++) {
-		pairs.push_back(*i);
+		if (ec->atomics[(int) (*i)[0]].size() > 0
+				&& ec->atomics[(int) (*i)[1]].size() > 0) {
+			for (size_t k = 1; k <= all->rank; k++) {
+				constant += ec->topic_predictions[2 * k]
+						* ec->topic_predictions[2 * k - 1];
+			}
+		}
 	}
+
+	//Copy the Pairs
+	vector<string> pairs(all->pairs);
 
 	//Empty the pairs within all
 	all->pairs.clear();
 
+	// ((label_data*) ec->ld)->initial = constant; // suggested by John
+	((label_data*) ec->ld)->label -= constant;
+
 	// learning for the linear part
-	all->l.learn(ec);
+	cout << ec->loss << "  " << ec->final_prediction << endl;
+	data->base.learn(ec);
+	cout << ec->loss << "  " << ec->final_prediction << endl;
+
+	((label_data*) ec->ld)->label += constant;
+
+	all->pairs = pairs;
+	cout << "Pred after learning linear part: " << mf_inline_predict(*all, ec)
+			<< endl;
+	all->pairs.clear();
+
+	constant = ec->topic_predictions[0];
 
 	// save the indices for the linear part
 	v_array<unsigned char> indices;
-	for (unsigned char* i = ec->indices.begin; i != ec->indices.end; i++) {
-		indices.push_back(*i);
-	}
+	copy_array(indices, ec->indices);
+	/*for (unsigned char* i = ec->indices.begin; i != ec->indices.end; i++) {
+	 indices.push_back(*i);
+	 }*/
 
-	unsigned char free_index = 0;
+	unsigned char free_index = 106;
 	// find an 'empty' slot in atomics
 	// for (unsigned char c = 0; c < 256; c++) {
 	//	if (!ec->atomics[c]) {
 	//		free_index = c;
 	//		break;
-	//	}
+	//	} awk -F"\t" '{printf "%d |u %d |i %d\n", $3,$1,$2}' < ua.base | \
+	../../vowpalwabbit/vw /dev/stdin -b 18 -q ui --rank 10 --l2 0.001 \
+	  --learning_rate 0.025 --passes 20 --decay_learning_rate 0.97 --power_t 0 \
+	  -f movielens.reg --cache_file movielens.cache
 	//}
 
-
 	ec->indices.erase();
-	v_array<feature> left_features;
-	v_array<feature> right_features;
+
+	ec->atomics[free_index].erase();
 	for (vector<string>::iterator i = pairs.begin(); i != pairs.end(); i++) {
 		if (ec->atomics[(int) (*i)[0]].size() > 0
 				&& ec->atomics[(int) (*i)[1]].size() > 0) {
@@ -324,42 +360,69 @@ void learn_with_output(void* d, example* ec, bool shouldOutput) {
 					feature cf;
 					cf.weight_index = (f->weight_index + k) & mask;
 					cf.x = f->x * ec->topic_predictions[2 * k];
-					left_features.push_back(cf);
+					ec->atomics[free_index].push_back(cf);
 				}
 			}
-			ec->atomics[free_index] = left_features;
 			ec->indices.push_back(free_index);
-			all->l.learn(ec);
+
+			((label_data*) ec->ld)->label -= constant;
+			cout << ec->loss << "  " << ec->final_prediction << endl;
+			data->base.learn(ec);
+			cout << ec->loss << "  " << ec->final_prediction << endl;
+			((label_data*) ec->ld)->label += constant;
+
+			copy_array(ec->indices, indices);
+			all->pairs = pairs;
+			cout << "Pred after learning left part: "
+					<< mf_inline_predict(*all, ec) << endl;
+			all->pairs.clear();
+			ec->indices.erase();
+			ec->indices.push_back(free_index);
+			// constant = ec->topic_predictions[0];
+
+			ec->atomics[free_index].erase();
 
 			for (size_t k = 1; k <= all->rank; k++) {
 				for (feature* f = ec->atomics[(int) (*i)[1]].begin;
 						f != ec->atomics[(int) (*i)[1]].end; f++) {
 					feature cf;
-					cf.weight_index = (f->weight_index + k) & mask;
+					cf.weight_index = (f->weight_index + k + all->rank) & mask;
 					cf.x = f->x * ec->topic_predictions[2 * k - 1];
-					right_features.push_back(cf);
+					ec->atomics[free_index].push_back(cf);
 				}
 			}
-			ec->atomics[free_index] = right_features;
-			all->l.learn(ec);
+
+			((label_data*) ec->ld)->label -= constant;
+			cout << ec->loss << "  " << ec->final_prediction << endl;
+			data->base.learn(ec);
+			cout << ec->loss << "  " << ec->final_prediction << endl;
+			((label_data*) ec->ld)->label += constant;
+
+			all->pairs = pairs;
+			copy_array(ec->indices, indices);
+			cout << "Pred after learning right part: "
+					<< mf_inline_predict(*all, ec) << endl;
+			all->pairs.clear();
 		}
 	}
 
-	ec->indices.erase();
-	for (unsigned char* i = indices.begin; i != indices.end; i++) {
-		ec->indices.push_back(*i);
-	}
+	all->pairs = pairs;
+	copy_array(ec->indices, indices);
 
-	for (vector<string>::iterator i = pairs.begin(); i != pairs.end(); i++) {
-		all->pairs.push_back(*i);
-	}
+	ec->final_prediction = mf_inline_predict(*all, ec);
+	ec->loss = all->loss->getLoss(all->sd, ec->final_prediction, ((label_data*) ec->ld)->label) * ((label_data*) ec->ld)->weight;
+
+	cout << endl << endl;
 }
 
 void learn(void* d, example* ec) {
 	learn_with_output(d, ec, false);
 }
 
-void finish(void* d) {
+void finish(void* data) {
+	mf* o = (mf*) data;
+	o->base.finish();
+	free(o);
 }
 
 void drive(vw* all, void* d) {
@@ -369,6 +432,7 @@ void drive(vw* all, void* d) {
 		if ((ec = VW::get_example(all->p)) != NULL) //blocking operation.
 		{
 			learn(d, ec);
+			cout << "***" << ec->loss << endl;
 			return_simple_example(*all, ec);
 		} else if (parser_done(all->p))
 			return;
@@ -377,9 +441,15 @@ void drive(vw* all, void* d) {
 	}
 }
 
+
+
 learner setup(vw& all) {
-	sl_t sl = { &all, save_load };
-	learner l = { &all, drive, learn, finish, sl };
+	mf* data = (mf*) calloc(1, sizeof(mf));
+
+	data->base = all.l;
+	data->all = &all;
+
+	learner l = { data, drive, learn, finish, all.l.sl };
 	return l;
 }
 }
