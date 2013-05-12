@@ -319,11 +319,10 @@ void learn_with_output(void* d, example* ec, bool shouldOutput) {
 	//Find out the slots within the ec->atomics which are not occupied with A-Z; a-z
 	int count = 0;
 	unsigned char start, end,free_index;
-
 	//Dummy indicator
 	start = 125;
 	for (unsigned char c = 65; c <= 122; c++) {
-		if (ec->atomics[c].size() == 0) {
+		if (ec->atomics[c].begin == ec->atomics[c].end) {
 			//Found a empty slot
 			count++;
 			if(start == 125)
@@ -341,15 +340,16 @@ void learn_with_output(void* d, example* ec, bool shouldOutput) {
 				free_index = c;
 				break;
 			}
-
 		}
 		else
 		{
 				start = 125;
-				//Need Consecutive slots so start has to be next character
 				count = 0;
 		}
 	}
+	//////////// Empty Slots found ----------------------------------------------
+
+
 
 	//Start and end contain the range of consecutive locations
 	//cout << "Start" << start << "End " << end << "Free Index " << free_index << endl;
@@ -366,7 +366,9 @@ void learn_with_output(void* d, example* ec, bool shouldOutput) {
 	ec->indices.erase();
 
 	for (unsigned char c = start; c <= end-1; c++)
+	{
 		ec->indices.push_back(c);
+	}
 
 	((label_data*) ec->ld)->initial = constant;
 
@@ -385,23 +387,13 @@ void learn_with_output(void* d, example* ec, bool shouldOutput) {
 	}
 
 	// cout << "Pred after learning linear part: " << 
-    ec->final_prediction = mf_inline_predict(*all, ec);
+	ec->final_prediction = mf_inline_predict(*all, ec);
 
 	constant = ec->topic_predictions[0];
 
-	// find an 'empty' slot in atomics
-	// for (unsigned char c = 0; c < 256; c++) {
-	//	if (ec->atomics[c].begin == ec->atomics[c].end) {
-	//		free_index = c;
-	//		break;
-	//	} awk -F"\t" '{printf "%d |u %d |i %d\n", $3,$1,$2}' < ua.base | \
-	../../vowpalwabbit/vw /dev/stdin -b 18 -q ui --rank 10 --l2 0.001 \
-	  --learning_rate 0.025 --passes 20 --decay_learning_rate 0.97 --power_t 0 \
-	  -f movielens.reg --cache_file movielens.cache
-	//}
 
 	ec->indices.erase();
-    ec->atomics[free_index].erase();
+	ec->atomics[free_index].erase();
 	for (vector<string>::iterator i = all->pairs.begin(); i != all->pairs.end();
 			i++) {
 		if (ec->atomics[(int) (*i)[0]].size() > 0
@@ -444,7 +436,7 @@ void learn_with_output(void* d, example* ec, bool shouldOutput) {
 			// cout << "Pred after learning left part: "
 			// 		<< mf_inline_predict(*all, ec) << endl;
 
-            ec->final_prediction = mf_inline_predict(*all, ec);
+       		        ec->final_prediction = mf_inline_predict(*all, ec);
 			ec->indices.erase();
 			ec->indices.push_back(free_index);
 			// constant = ec->topic_predictions[0];
@@ -479,8 +471,7 @@ void learn_with_output(void* d, example* ec, bool shouldOutput) {
 						}
 
 						cout << endl;
-
-*/
+			*/
 
 
 
@@ -492,7 +483,13 @@ void learn_with_output(void* d, example* ec, bool shouldOutput) {
 			}
 		//	cout << "Pred after learning right part: "
 		//			<< mf_inline_predict(*all, ec) << endl;
-            ec->final_prediction = mf_inline_predict(*all, ec);
+         		ec->final_prediction = mf_inline_predict(*all, ec);
+	
+			//Clear for the Free index
+			ec->atomics[free_index].erase();	
+		        //At this point all the atomics of ec are restored as they were before the start of the function ---
+
+
 		}
 	}
 
@@ -502,7 +499,6 @@ void learn_with_output(void* d, example* ec, bool shouldOutput) {
 	ec->loss = all->loss->getLoss(all->sd, ec->final_prediction,
 			((label_data*) ec->ld)->label) * ((label_data*) ec->ld)->weight;
 
-	// cout << endl << endl;
 }
 
 void learn(void* d, example* ec) {
