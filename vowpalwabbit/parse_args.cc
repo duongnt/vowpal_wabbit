@@ -411,6 +411,8 @@ vw* parse_args(int argc, char *argv[])
     all->reg.stride = 1 << (int) temp;
     all->random_weights = true;
 
+    /*
+
     if ( vm.count("adaptive") )
       {
 	cerr << "adaptive is not implemented for matrix factorization" << endl;
@@ -431,7 +433,7 @@ vw* parse_args(int argc, char *argv[])
 	cerr << "bfgs is not implemented for matrix factorization" << endl;
 	throw exception();
       }	
-
+ */
     //default initial_t to 1 instead of 0
     if(!vm.count("initial_t")) {
       all->sd->t = 1.f;
