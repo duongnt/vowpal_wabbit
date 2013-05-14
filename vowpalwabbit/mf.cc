@@ -21,7 +21,10 @@
 #include "simple_label.h"
 #include "rand48.h"
 #include "vw.h"
-
+#include <algorithm>
+#include "hash.h"
+#include <sstream>
+#include "parse_primitives.h"
 
 using namespace std;
 
@@ -29,6 +32,7 @@ namespace MF {
 
 struct mf {
 	learner base;
+	vector<string> pairs;
 	vw* all;
 };
 
@@ -281,6 +285,153 @@ void save_load(void* d, io_buf& model_file, bool read, bool text) {
 	}
 }
 
+float inline_predict(mf* data, vw* all, example* &ec, unsigned char temp_ind) {
+	v_array<unsigned char> indices;
+	copy_array(indices, ec->indices);
+
+	float quad_constant = 0;
+
+	ec->topic_predictions.erase();
+
+	all->training = false;
+
+	data->base.learn(ec);
+
+	// cout << "L=" << ec->partial_prediction << endl;
+
+	ec->topic_predictions.push_back(ec->partial_prediction);
+
+	for (vector<string>::iterator i = data->pairs.begin();
+			i != data->pairs.end(); i++) {
+		if (ec->atomics[(int) (*i)[0]].size() > 0
+				&& ec->atomics[(int) (*i)[1]].size() > 0) {
+			for (size_t k = 1; k <= all->rank; k++) {
+				ec->atomics[temp_ind].erase();
+
+				/*
+				 cout << "before:";
+				 for (unsigned char* x = indices.begin; x != indices.end; x++)
+				 for (feature * f = ec->atomics[*x].begin;
+				 f != ec->atomics[*x].end; f++) {
+				 cout << *x << ":" << f->x << ":" << f->weight_index
+				 << ":"
+				 << all->reg.weight_vector[f->weight_index & mask]
+				 << "  ";
+				 }
+				 cout << endl;
+				 */
+				for (feature* f = ec->atomics[(int) (*i)[0]].begin;
+						f != ec->atomics[(int) (*i)[0]].end; f++) {
+					feature cf;
+
+					cf.weight_index = f->weight_index + k * all->reg.stride;
+					cf.x = f->x;
+
+					ec->atomics[temp_ind].push_back(cf);
+				}
+				// cout << endl;
+
+				ec->indices.erase();
+				ec->indices.push_back(temp_ind);
+
+				data->base.learn(ec);
+				//cout << "l=" << ec->partial_prediction << endl;
+				ec->atomics[temp_ind].erase();
+				/*
+				 cout << "after:";
+				 for (unsigned char* x = indices.begin; x != indices.end; x++)
+				 for (feature * f = ec->atomics[*x].begin;
+				 f != ec->atomics[*x].end; f++) {
+				 cout << *x << ":" << f->x << ":" << f->weight_index
+				 << ":"
+				 << all->reg.weight_vector[f->weight_index & mask]
+				 << "  ";
+				 }
+				 cout << endl;
+				 */
+				float x_dot_l = ec->partial_prediction;
+				ec->topic_predictions.push_back(ec->partial_prediction);
+
+				for (feature* f = ec->atomics[(int) (*i)[1]].begin;
+						f != ec->atomics[(int) (*i)[1]].end; f++) {
+					feature cf;
+
+					cf.weight_index = f->weight_index
+							+ (all->rank + k) * all->reg.stride;
+					cf.x = f->x;
+					ec->atomics[temp_ind].push_back(cf);
+				}
+
+				ec->indices.erase();
+				ec->indices.push_back(temp_ind);
+
+				data->base.learn(ec);
+
+				//cout << "r=" << ec->partial_prediction << endl;
+
+				float x_dot_r = ec->partial_prediction;
+				ec->topic_predictions.push_back(ec->partial_prediction);
+
+				quad_constant += (x_dot_l * x_dot_r);
+			}
+		}
+	}
+
+	ec->atomics[temp_ind].erase();
+	/*
+	 for (unsigned char* i = indices.begin; i != indices.end; i++)
+	 for (feature * f = ec->atomics[*i].begin; f != ec->atomics[*i].end;
+	 f++) {
+	 cout << *i << ":" << f->x << ":" << f->weight_index << ":"
+	 << all->reg.weight_vector[f->weight_index & mask] << "  ";
+	 }
+	 cout << endl;
+	 */
+
+	copy_array(ec->indices, indices);
+	//cout << "DEBUG tp:       " << ec->topic_predictions[2] << endl;
+	all->training = true;
+	return quad_constant + ec->topic_predictions[0];
+}
+
+void debug_weights(v_array<unsigned char> indices, example * ec, vw * all,
+		mf * data, size_t mask) {
+
+	for (unsigned char* i = indices.begin; i != indices.end; i++)
+		for (feature * f = ec->atomics[*i].begin; f != ec->atomics[*i].end;
+				f++) {
+			cout << *i << ":" << f->x << ":" << f->weight_index << ":"
+					<< all->reg.weight_vector[f->weight_index & mask] << "  ";
+		}
+
+	for (vector<string>::iterator i = data->pairs.begin();
+			i != data->pairs.end(); i++) {
+		if (ec->atomics[(int) (*i)[0]].size() > 0
+				&& ec->atomics[(int) (*i)[1]].size() > 0) {
+			for (size_t k = 1; k <= all->rank; k++) {
+				for (feature* f = ec->atomics[(int) (*i)[0]].begin;
+						f != ec->atomics[(int) (*i)[0]].end; f++) {
+					cout << "l" << ":" << f->x << ":"
+							<< f->weight_index + k * all->reg.stride << ":"
+							<< all->reg.weight_vector[(f->weight_index
+									+ k * all->reg.stride) & mask] << "  ";
+				}
+
+				for (feature* f = ec->atomics[(int) (*i)[1]].begin;
+						f != ec->atomics[(int) (*i)[1]].end; f++) {
+					cout << "r" << ":" << f->x << ":"
+							<< f->weight_index
+									+ (all->rank + k) * all->reg.stride << ":"
+							<< all->reg.weight_vector[(f->weight_index
+									+ (all->rank + k) * all->reg.stride) & mask]
+							<< "  ";
+				}
+			}
+		}
+	}
+	cout << endl;
+}
+
 void learn_with_output(void* d, example* ec, bool shouldOutput) {
 	mf* data = (mf*) d;
 	vw* all = data->all;
@@ -290,212 +441,148 @@ void learn_with_output(void* d, example* ec, bool shouldOutput) {
 		return;
 	}
 
+	assert(all->training);
+
+	cout << all->sd->example_number << endl;
+	unsigned char left_ind = 'j';
+	while (ec->atomics[left_ind].begin != ec->atomics[left_ind].end)
+		left_ind++;
+
+	unsigned char right_ind = left_ind + 1;
+	while (ec->atomics[right_ind].begin != ec->atomics[right_ind].end)
+		right_ind++;
+
+	unsigned char temp_ind = right_ind + 1;
+	while (ec->atomics[temp_ind].begin != ec->atomics[temp_ind].end)
+		temp_ind++;
+
+	float prediction = inline_predict(data, all, ec, temp_ind);
+	//cout << "DEBUG tp:       " << ec->topic_predictions[2] << endl;
+
+	cout << "label: " << ((label_data*) ec->ld)->label << endl;
+	cout << "before learning: " << prediction << endl;
+	float quad_constant = prediction - ec->topic_predictions[0];
+	float linear_constant = ec->topic_predictions[0];
 	size_t mask = all->reg.weight_mask;
-
-	// cout << "Label: " << ((label_data*) ec->ld)->label << endl;
-	// cout << "Pred before any learning: " << mf_inline_predict(*all, ec) << endl;
-
-	mf_inline_predict(*all, ec);
-       
-	float constant = 0;
-	// calculate constant for linear part
-	for (vector<string>::iterator i = all->pairs.begin(); i != all->pairs.end();
-			i++) {
-		if (ec->atomics[(int) (*i)[0]].size() > 0
-				&& ec->atomics[(int) (*i)[1]].size() > 0) {
-			for (size_t k = 1; k <= all->rank; k++) {
-				constant += ec->topic_predictions[2 * k]
-						* ec->topic_predictions[2 * k - 1];
-			}
-		}
-	}
-
-	//Copy the Pairs
-	//vector<string> pairs(all->pairs);
-
-	//Empty the pairs within all
-	//all->pairs.clear();
-
-	//Find out the slots within the ec->atomics which are not occupied with A-Z; a-z
-	int count = 0;
-	unsigned char start, end,free_index;
-	//Dummy indicator
-	start = 125;
-	for (unsigned char c = 65; c <= 122; c++) {
-		if (ec->atomics[c].begin == ec->atomics[c].end) {
-			//Found a empty slot
-			count++;
-			if(start == 125)
-			{
-				//Start has not been set
-				start = c;
-			}
-			else if(count == ec->indices.size() + 1)
-			{
-				end = c;
-			}
-			else if(count == ec->indices.size() + 2)
-			{
-				//We also store one index for free_index
-				free_index = c;
-				break;
-			}
-		}
-		else
-		{
-				start = 125;
-				count = 0;
-		}
-	}
-	//////////// Empty Slots found ----------------------------------------------
-
-
-
-	//Start and end contain the range of consecutive locations
-	//cout << "Start" << start << "End " << end << "Free Index " << free_index << endl;
-
-
-	// Saving indices and moving atomics
-	for (size_t i = 0; i < ec->indices.size(); i++) {
-		ec->atomics[(int) start + i] = ec->atomics[ec->indices[i]];
-		ec->atomics[ec->indices[i]] = ec->atomics[(int) end];
-	}
 
 	v_array<unsigned char> indices;
 	copy_array(indices, ec->indices);
-	ec->indices.erase();
 
-	for (unsigned char c = start; c <= end-1; c++)
-	{
-		ec->indices.push_back(c);
-	}
+	//cout << "DEBUG tp:       " << ec->topic_predictions[2] << endl;
+	//cout << "before:";
+	//debug_weights(indices, ec, all, data, mask);
 
-	((label_data*) ec->ld)->initial = constant;
-
-	// learning for the linear part
+	// learn linear part
+	((label_data*) ec->ld)->initial = quad_constant;
 	// cout << ec->loss << "  " << ec->final_prediction << endl;
 	data->base.learn(ec);
 	// cout << ec->loss << "  " << ec->final_prediction << endl;
-
 	((label_data*) ec->ld)->initial = 0;
 
-	// Restore indices and moving atomics back
-	copy_array(ec->indices, indices);
-	for (size_t i = 0; i < ec->indices.size(); i++) {
-		ec->atomics[ec->indices[i]] = ec->atomics[(int) start + i];
-		ec->atomics[(int) start + i] = ec->atomics[(int) end];
-	}
+	//cout << "DEBUG tp:       " << ec->topic_predictions[2] << endl;
+	cout << "after Linear:" << inline_predict(data, all, ec, temp_ind) << endl;
 
-	// cout << "Pred after learning linear part: " << 
-	ec->final_prediction = mf_inline_predict(*all, ec);
+	//debug_weights(indices, ec, all, data, mask);
+	// Learn the left part
 
-	constant = ec->topic_predictions[0];
+	//cout << "before:";
+	//debug_weights(indices, ec, all, data, mask);
 
+	//cout << "DEBUG tp:       " << ec->topic_predictions[2] << endl;
+
+	prediction = inline_predict(data, all, ec, temp_ind);
+	quad_constant = prediction - ec->topic_predictions[0];
+	linear_constant = ec->topic_predictions[0];
 
 	ec->indices.erase();
-	ec->atomics[free_index].erase();
-	for (vector<string>::iterator i = all->pairs.begin(); i != all->pairs.end();
-			i++) {
-		if (ec->atomics[(int) (*i)[0]].size() > 0
-				&& ec->atomics[(int) (*i)[1]].size() > 0) {
+	ec->indices.push_back(left_ind);
+
+	ec->atomics[left_ind].erase();
+
+	for (vector<string>::iterator i = data->pairs.begin();
+			i != data->pairs.end(); i++) {
+		if (ec->atomics[(int) (*i)[0]].size() > 0) {
 			for (size_t k = 1; k <= all->rank; k++) {
 				for (feature* f = ec->atomics[(int) (*i)[0]].begin;
 						f != ec->atomics[(int) (*i)[0]].end; f++) {
 					feature cf;
-					cf.weight_index = (f->weight_index + k) & mask;
+
+					//cf.weight_index = f->weight_index + k * all->reg.stride;
+					cf.weight_index = quadratic_constant * (f->weight_index + k);
+					//cout << "                   tp:"
+					//		<< ec->topic_predictions[2 * k] << endl;
+					cout << " F Index " << cf.weight_index  << endl;
 					cf.x = f->x * ec->topic_predictions[2 * k];
-					ec->atomics[free_index].push_back(cf);
+					//cout << "l: " << cf.weight_index << endl;
+					ec->atomics[left_ind].push_back(cf);
 				}
-			}
-			ec->indices.push_back(free_index);
-			for (size_t x = 0; x < indices.size(); x++) {
-				ec->atomics[(int) start + x] = ec->atomics[indices[x]];
-				ec->atomics[indices[x]] = ec->atomics[(int) end];
-			}
-
-			((label_data*) ec->ld)->initial = constant;
-			// cout << ec->loss << "  " << ec->final_prediction << endl;
-			data->base.learn(ec);
-			// cout << ec->loss << "  " << ec->final_prediction << endl;
-			((label_data*) ec->ld)->initial = 0;
-
-			/* cout << "Left  : ";
-			for(feature* f = ec->atomics[free_index].begin; f != ec->atomics[free_index].end; f++)
-			{
-				cout << f->weight_index << ":" << all->reg.weight_vector[f->weight_index] <<  "  ";
 
 			}
-
-			cout << endl; */
-
-			copy_array(ec->indices, indices);
-			for (size_t x = 0; x < ec->indices.size(); x++) {
-				ec->atomics[ec->indices[x]] = ec->atomics[(int) start + x];
-				ec->atomics[(int) start + x] = ec->atomics[(int) end];
-			}
-			// cout << "Pred after learning left part: "
-			// 		<< mf_inline_predict(*all, ec) << endl;
-
-       		        ec->final_prediction = mf_inline_predict(*all, ec);
-			ec->indices.erase();
-			ec->indices.push_back(free_index);
-			// constant = ec->topic_predictions[0];
-
-			ec->atomics[free_index].erase();
-			for (size_t k = 1; k <= all->rank; k++) {
-				for (feature* f = ec->atomics[(int) (*i)[1]].begin;
-						f != ec->atomics[(int) (*i)[1]].end; f++) {
-					feature cf;
-					cf.weight_index = (f->weight_index + k + all->rank) & mask;
-					cf.x = f->x * ec->topic_predictions[2 * k - 1];
-					ec->atomics[free_index].push_back(cf);
-				}
-			}
-
-			for (size_t x = 0; x < indices.size(); x++) {
-				ec->atomics[(int) start + x] = ec->atomics[indices[x]];
-				ec->atomics[indices[x]] = ec->atomics[(int) end];
-			}
-			((label_data*) ec->ld)->initial = constant;
-		//	cout << ec->loss << "  " << ec->final_prediction << endl;
-			data->base.learn(ec);
-		//	cout << ec->loss << "  " << ec->final_prediction << endl;
-			((label_data*) ec->ld)->initial = 0;
-
-			/*
-			cout << "Right  : ";
-						for(feature* f = ec->atomics[free_index].begin; f != ec->atomics[free_index].end; f++)
-						{
-							cout << f->weight_index << ":" << all->reg.weight_vector[f->weight_index] <<  "  ";
-
-						}
-
-						cout << endl;
-			*/
-
-
-
-			copy_array(ec->indices, indices);
-
-			for (size_t x = 0; x < ec->indices.size(); x++) {
-				ec->atomics[ec->indices[x]] = ec->atomics[(int) start + x];
-				ec->atomics[(int) start + x] = ec->atomics[(int) end];
-			}
-		//	cout << "Pred after learning right part: "
-		//			<< mf_inline_predict(*all, ec) << endl;
-         		ec->final_prediction = mf_inline_predict(*all, ec);
-	
-			//Clear for the Free index
-			ec->atomics[free_index].erase();	
-		        //At this point all the atomics of ec are restored as they were before the start of the function ---
-
-
 		}
 	}
 
-	copy_array(ec->indices, indices);
+	/*
+	 assert(ec->atomics[left_ind].size() == all->rank * (ec->atomics[(int)'u'].end - ec->atomics[(int)'u'].begin));
+	 for (unsigned char * i = ec->indices.begin; i != ec->indices.end; i++)
+	 cout << *i << "  ";
+	 cout << endl;
+	 assert(ec->indices.size() == 1);
+	 */
+	((label_data*) ec->ld)->initial = linear_constant;
+	data->base.learn(ec);
+	((label_data*) ec->ld)->initial = 0;
 
-	ec->final_prediction = mf_inline_predict(*all, ec);
+	//cout << "after:";
+	//debug_weights(indices, ec, all, data, mask);
+
+	 copy_array(ec->indices, indices);
+	 prediction = inline_predict(data, all, ec, temp_ind);
+	 quad_constant = prediction - ec->topic_predictions[0];
+	 linear_constant = ec->topic_predictions[0];
+
+	 cout << "after Left:" << prediction << endl;
+
+	// Learn the right part
+	ec->indices.erase();
+	ec->indices.push_back(right_ind);
+
+	//cout << "before:";
+	//debug_weights(indices, ec, all, data, mask);
+
+	ec->atomics[right_ind].erase();
+	for (vector<string>::iterator i = data->pairs.begin();
+			i != data->pairs.end(); i++) {
+		if (ec->atomics[(int) (*i)[1]].size() > 0) {
+			for (size_t k = 1; k <= all->rank; k++) {
+
+				for (feature* f = ec->atomics[(int) (*i)[1]].begin;
+						f != ec->atomics[(int) (*i)[1]].end; f++) {
+					feature cf;
+
+					/*cf.weight_index = f->weight_index
+							+ (all->rank + k) * all->reg.stride;*/
+
+					cf.weight_index = quadratic_constant * (f->weight_index + (all->rank + k));
+
+					cf.x = f->x * ec->topic_predictions[2 * k - 1];
+					ec->atomics[right_ind].push_back(cf);
+				}
+
+			}
+		}
+	}
+
+	((label_data*) ec->ld)->initial = linear_constant;
+	data->base.learn(ec);
+	((label_data*) ec->ld)->initial = 0;
+
+	//cout << "after:";
+	//debug_weights(indices, ec, all, data, mask);
+
+	copy_array(ec->indices, indices);
+	ec->final_prediction = inline_predict(data, all, ec, temp_ind);
+	cout << "after learning: " << ec->final_prediction << endl;
+
 	ec->loss = all->loss->getLoss(all->sd, ec->final_prediction,
 			((label_data*) ec->ld)->label) * ((label_data*) ec->ld)->weight;
 
@@ -514,17 +601,10 @@ void finish(void* data) {
 void drive(vw* all, void* d) {
 	example* ec = NULL;
 
-	for (size_t j = 0; j < (((size_t)1) << all->num_bits) *all->reg.stride; j++) {
-	      if (j < 100) cout << all->reg.weight_vector[j] << " ";
-	      }
-	cout << endl;
-
 	while (true) {
 		if ((ec = VW::get_example(all->p)) != NULL) //blocking operation.
-		{
-
+				{
 			learn(d, ec);
-			// cout << "***" << ec->loss << endl;
 			return_simple_example(*all, ec);
 		} else if (parser_done(all->p))
 			return;
@@ -538,6 +618,10 @@ learner setup(vw& all) {
 
 	data->base = all.l;
 	data->all = &all;
+
+	data->pairs = all.pairs;
+
+	all.pairs.clear();
 
 	learner l = { data, drive, learn, finish, all.l.sl };
 

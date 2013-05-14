@@ -1,0 +1,142 @@
+cb.cc:    *(all.p->lp) = CB::cb_label_parser; 
+csoaa.cc:    *(all.p->lp) = cs_label_parser;
+csoaa.cc:    if (OAA::example_is_newline(ec) || l.ec_seq.size() >= all.p->ring_size - 2 || command_example(&all,ec)) {
+csoaa.cc:      if (l.ec_seq.size() >= all.p->ring_size - 2 && l.first_pass)
+csoaa.cc:    *(all.p->lp) = CSOAA::cs_label_parser;
+ect.cc:    *(all.p->lp) = OAA::mc_label_parser;
+gd.h:     float prediction = all.p->lp->get_initial(ec->ld);
+lda_core.cc:  all.p->sort_features = true;
+lda_core.cc:    all.p->ring_size = all.p->ring_size > minibatch2 ? all.p->ring_size : minibatch2;
+oaa.cc:    *(all.p->lp) = mc_label_parser;
+parse_args.cc:    free(all.p->lp);
+parse_args.cc:    all.p->parse_name.erase();
+parse_args.cc:    all.p->parse_name.delete_v();
+parser.cc:  io_buf* input = all.p->input;
+parser.cc:  if (all.p->write_cache)
+parser.cc:      all.p->output->flush();
+parser.cc:      all.p->write_cache = false;
+parser.cc:      all.p->output->close_file();
+parser.cc:	  remove(all.p->output->finalname.begin);
+parser.cc:      rename(all.p->output->currentname.begin, all.p->output->finalname.begin);
+parser.cc:      input->open_file(all.p->output->finalname.begin, all.stdin_off, io_buf::READ); //pushing is merged into open_file
+parser.cc:      all.p->reader = read_cached_features;
+parser.cc:  if ( all.p->resettable == true )
+parser.cc:	  mutex_lock(&all.p->output_lock);
+parser.cc:	  while (all.p->local_example_number != all.p->parsed_examples)
+parser.cc:	    condition_variable_wait(&all.p->output_done, &all.p->output_lock);
+parser.cc:	  mutex_unlock(&all.p->output_lock);
+parser.cc:	  _close(all.p->input->files[0]);
+parser.cc:	  close(all.p->input->files[0]);
+parser.cc:	  all.p->input->files.erase();
+parser.cc:	  int f = (int)accept(all.p->bound_sock,(sockaddr*)&client_address,&size);
+parser.cc:	  all.p->input->files.push_back(f);
+parser.cc:	  if (isbinary(*(all.p->input))) {
+parser.cc:	    all.p->reader = read_cached_features;
+parser.cc:	    all.p->reader = read_features;
+parser.cc:  io_buf* output = all.p->output;
+parser.cc:  all.p->write_cache = true;
+parser.cc:  all.p->write_cache = false;
+parser.cc:        f = all.p->input->open_file(caches[i].c_str(), all.stdin_off, io_buf::READ);
+parser.cc:	uint32_t c = cache_numbits(all.p->input, f);
+parser.cc:          all.p->input->close_file();          
+parser.cc:	  all.p->reader = read_cached_features;
+parser.cc:	    all.p->sorted_cache = true;
+parser.cc:	    all.p->sorted_cache = false;
+parser.cc:	  all.p->resettable = true;
+parser.cc:      all.p->output->space.delete_v();
+parser.cc:  all.p->input->current = 0;
+parser.cc:      all.p->bound_sock = (int)socket(PF_INET, SOCK_STREAM, 0);
+parser.cc:      if (all.p->bound_sock < 0) {
+parser.cc:      if (setsockopt(all.p->bound_sock, SOL_SOCKET, SO_REUSEADDR, (char*)&on, sizeof(on)) < 0) 
+parser.cc:      if ( ::bind(all.p->bound_sock,(sockaddr*)&address, sizeof(address)) < 0 )
+parser.cc:      listen(all.p->bound_sock, source_count);
+parser.cc:      all.p->max_fd = 0;
+parser.cc:      int f = (int)accept(all.p->bound_sock,(sockaddr*)&client_address,&size);
+parser.cc:      all.p->label_sock = f;
+parser.cc:      all.p->input->files.push_back(f);
+parser.cc:      all.p->max_fd = max(f, all.p->max_fd);
+parser.cc:      all.p->max_fd++;
+parser.cc:	  all.p->reader = read_features;
+parser.cc:	  all.p->hasher = getHasher(hash_function);
+parser.cc:	if (isbinary(*(all.p->input))) {
+parser.cc:	  all.p->reader = read_cached_features;
+parser.cc:	  all.p->reader = read_features;
+parser.cc:	all.p->hasher = getHasher(hash_function);
+parser.cc:	all.p->sorted_cache = true;
+parser.cc:      all.p->resettable = all.p->write_cache || all.daemon;
+parser.cc:      if (all.p->input->files.size() > 0)
+parser.cc:	  int f = all.p->input->open_file(temp.c_str(), all.stdin_off, io_buf::READ);
+parser.cc:	  all.p->reader = read_features;
+parser.cc:	  all.p->hasher = getHasher(hash_function);
+parser.cc:	  all.p->resettable = all.p->write_cache;
+parser.cc:  if (passes > 1 && !all.p->resettable)
+parser.cc:  all.p->input->count = all.p->input->files.size();
+parser.cc:    cerr << "num sources = " << all.p->input->files.size() << endl;
+parser.cc:	  all.p->gram_mask.erase();
+parser.cc:	  all.p->gram_mask.push_back((size_t)0);
+parser.cc:		   length, all.p->gram_mask, 0);
+parser.cc:      mutex_lock(&all.p->examples_lock);
+parser.cc:      if (all.p->examples[all.p->parsed_examples % all.p->ring_size].in_use == false)
+parser.cc:	  all.p->examples[all.p->parsed_examples % all.p->ring_size].in_use = true;
+parser.cc:	  mutex_unlock(&all.p->examples_lock);
+parser.cc:	  return all.p->examples + (all.p->parsed_examples % all.p->ring_size);
+parser.cc:	condition_variable_wait(&all.p->example_unused, &all.p->examples_lock);
+parser.cc:      mutex_unlock(&all.p->examples_lock);
+parser.cc:  if (do_read && all.p->reader(&all, ae) <= 0)
+parser.cc:  if(all.p->sort_features && ae->sorted == false)
+parser.cc:  if (all.p->write_cache) 
+parser.cc:      all.p->lp->cache_label(ae->ld,*(all.p->output));
+parser.cc:      cache_features(*(all.p->output), ae, all.parse_mask);
+parser.cc:  all.p->lp->default_label(ae->ld);
+parser.cc:  ae->example_counter = (size_t)(all.p->parsed_examples + 1);
+parser.cc:  ae->global_weight = all.p->lp->get_weight(ae->ld);
+parser.cc:    all.p->lp->default_label(ec->ld);
+parser.cc:    all.p->parsed_examples++;
+parser.cc:    ec->example_counter = all.p->parsed_examples;
+parser.cc:    all.p->parsed_examples++;
+parser.cc:    all.p->lp->default_label(ret->ld);
+parser.cc:    all.p->parsed_examples++;
+parser.cc:    all.p->lp->default_label(ret->ld);
+parser.cc:    parse_atomic_example(all,ret,false); // all.p->parsed_examples++;
+parser.cc:    all.p->lp->parse_label(all.p, all.sd, ec.ld, words);
+parser.cc:    mutex_lock(&all.p->output_lock);
+parser.cc:    all.p->local_example_number++;
+parser.cc:    condition_variable_signal(&all.p->output_done);
+parser.cc:    mutex_unlock(&all.p->output_lock);
+parser.cc:    mutex_lock(&all.p->examples_lock);
+parser.cc:    condition_variable_signal(&all.p->example_unused);
+parser.cc:    if (all.p->done)
+parser.cc:      condition_variable_signal_all(&all.p->example_available);
+parser.cc:    mutex_unlock(&all.p->examples_lock);
+parser.cc:  all.p->used_index = 0;
+parser.cc:  all.p->parsed_examples = 0;
+parser.cc:  all.p->done = false;
+parser.cc:  all.p->examples = (example*)calloc(all.p->ring_size, sizeof(example));
+parser.cc:  for (size_t i = 0; i < all.p->ring_size; i++)
+parser.cc:      all.p->examples[i].ld = calloc(1,all.p->lp->label_size);
+parser.cc:      all.p->examples[i].in_use = false;
+parser.cc:	all.p->used_index=all.p->parsed_examples;
+parser.cc:  initialize_mutex(&all.p->examples_lock);
+parser.cc:  initialize_condition_variable(&all.p->example_available);
+parser.cc:  initialize_condition_variable(&all.p->example_unused);
+parser.cc:  initialize_mutex(&all.p->output_lock);
+parser.cc:  initialize_condition_variable(&all.p->output_done);
+parser.cc:  all.p->channels.delete_v();
+parser.cc:  all.p->words.delete_v();
+parser.cc:  all.p->name.delete_v();
+parser.cc:    all.p->gram_mask.delete_v();
+parser.cc:  for (size_t i = 0; i < all.p->ring_size; i++) 
+parser.cc:      dealloc_example(all.p->lp->delete_label, all.p->examples[i]);
+parser.cc:  free(all.p->examples);
+parser.cc:  io_buf* output = all.p->output;
+parser.cc:  all.p->counts.delete_v();
+parser.cc:  delete_mutex(&all.p->examples_lock);
+parser.cc:  delete_mutex(&all.p->output_lock);
+searn.cc:    *(all.p->lp)=s->task.searn_label_parser;
+searn.cc:      if (ec->end_pass || OAA::example_is_newline(ec) || s.ec_seq.size() >= all.p->ring_size - 2) { // give some wiggle room
+searn.cc:	if (s.ec_seq.size() >= all.p->ring_size - 2)
+searn.cc:            VW::copy_example_data(srn->learn_example_copy[n], ecs[n], sizeof(CSOAA::label), all.p->lp->copy_label);
+vw.h:    return (uint32_t)all.p->hasher(ss,hash_base);
+vw.h:    return (uint32_t)(all.p->hasher(ss,u) & all.parse_mask);
+vw.h:    return (uint32_t)(all.p->hasher(ss,u) & all.parse_mask);
+wap.cc:    *(all.p->lp) = CSOAA::cs_label_parser;
