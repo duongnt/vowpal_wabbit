@@ -608,17 +608,21 @@ void learn_with_output(void* d, example* ec, bool shouldOutput) {
 	float quad_constant = prediction - ec->topic_predictions[0];
 	float linear_constant = ec->topic_predictions[0];
 
-	cout << "before learning: " << prediction << " = (" << linear_constant
-			<< " + " << quad_constant << ")" << endl;
+	//cout << "before learning: " << prediction << " = (" << linear_constant
+	//		<< " + " << quad_constant << ")" << endl;
 
 	learn_linear(data, all, ec, quad_constant, temp_ind);
 
+	linear_constant = ec->topic_predictions[0];
+
 	learn_left(data, all, ec, linear_constant, left_ind);
+
+	linear_constant = ec->topic_predictions[0];
 
 	learn_right(data, all, ec, linear_constant, right_ind);
 
 	ec->final_prediction = inline_predict(data, all, ec, temp_ind);
-	cout << "after learning: " << ec->final_prediction << endl;
+	//cout << "after learning: " << ec->final_prediction << endl;
 
 	ec->loss = all->loss->getLoss(all->sd, ec->final_prediction,
 			((label_data*) ec->ld)->label) * ((label_data*) ec->ld)->weight;
