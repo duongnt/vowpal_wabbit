@@ -33,6 +33,9 @@ namespace MF {
 struct mf {
 	learner base;
 	vector<string> pairs;
+
+	double lin_contraction, left_contraction, right_contraction;
+
 	vw* all;
 };
 
@@ -293,7 +296,8 @@ float inline_predict(mf* data, vw* all, example* &ec, unsigned char temp_ind) {
 
 	ec->topic_predictions.erase();
 
-	all->training = false;
+	float label = ((label_data*) ec->ld)->label;
+	((label_data*) ec->ld)->label = FLT_MAX;
 
 	data->base.learn(ec);
 
@@ -390,12 +394,13 @@ float inline_predict(mf* data, vw* all, example* &ec, unsigned char temp_ind) {
 
 	copy_array(ec->indices, indices);
 	//cout << "DEBUG tp:       " << ec->topic_predictions[2] << endl;
-	all->training = true;
+	((label_data*) ec->ld)->label = label;
 	return quad_constant + ec->topic_predictions[0];
 }
 
 void debug_weights(v_array<unsigned char> indices, example * ec, vw * all,
-		mf * data, size_t mask) {
+		mf * data) {
+	size_t mask = all->reg.weight_mask;
 
 	for (unsigned char* i = indices.begin; i != indices.end; i++)
 		for (feature * f = ec->atomics[*i].begin; f != ec->atomics[*i].end;
@@ -432,67 +437,44 @@ void debug_weights(v_array<unsigned char> indices, example * ec, vw * all,
 	cout << endl;
 }
 
-void learn_with_output(void* d, example* ec, bool shouldOutput) {
-	mf* data = (mf*) d;
-	vw* all = data->all;
-
-	if (command_example(all, ec)) {
-		data->base.learn(ec);
-		return;
-	}
-
-	assert(all->training);
-
-	cout << all->sd->example_number << endl;
-	unsigned char left_ind = 'j';
-	while (ec->atomics[left_ind].begin != ec->atomics[left_ind].end)
-		left_ind++;
-
-	unsigned char right_ind = left_ind + 1;
-	while (ec->atomics[right_ind].begin != ec->atomics[right_ind].end)
-		right_ind++;
-
-	unsigned char temp_ind = right_ind + 1;
-	while (ec->atomics[temp_ind].begin != ec->atomics[temp_ind].end)
-		temp_ind++;
-
-	float prediction = inline_predict(data, all, ec, temp_ind);
-	//cout << "DEBUG tp:       " << ec->topic_predictions[2] << endl;
-
-	cout << "label: " << ((label_data*) ec->ld)->label << endl;
-	cout << "before learning: " << prediction << endl;
-	float quad_constant = prediction - ec->topic_predictions[0];
-	float linear_constant = ec->topic_predictions[0];
-	size_t mask = all->reg.weight_mask;
-
+void learn_linear(mf* data, vw* all, example* &ec, float quad_constant,
+		unsigned char temp_ind) {
 	v_array<unsigned char> indices;
 	copy_array(indices, ec->indices);
 
 	//cout << "DEBUG tp:       " << ec->topic_predictions[2] << endl;
-	//cout << "before:";
-	//debug_weights(indices, ec, all, data, mask);
+	cout << "before:";
+	debug_weights(indices, ec, all, data);
 
 	// learn linear part
 	((label_data*) ec->ld)->initial = quad_constant;
 	// cout << ec->loss << "  " << ec->final_prediction << endl;
+	all->sd->contraction = data->lin_contraction;
 	data->base.learn(ec);
+	data->lin_contraction = all->sd->contraction;
 	// cout << ec->loss << "  " << ec->final_prediction << endl;
 	((label_data*) ec->ld)->initial = 0;
 
 	//cout << "DEBUG tp:       " << ec->topic_predictions[2] << endl;
-	cout << "after Linear:" << inline_predict(data, all, ec, temp_ind) << endl;
+	//cout << "after Linear:" << inline_predict(data, all, ec, temp_ind) << endl;
 
 	//debug_weights(indices, ec, all, data, mask);
+}
+
+void learn_left(mf* data, vw* all, example* &ec, float linear_constant,
+		unsigned char left_ind) {
+	v_array<unsigned char> indices;
+	copy_array(indices, ec->indices);
+
 	// Learn the left part
-
-	//cout << "before:";
-	//debug_weights(indices, ec, all, data, mask);
+	cout << "before:";
+	debug_weights(ec->indices, ec, all, data);
 
 	//cout << "DEBUG tp:       " << ec->topic_predictions[2] << endl;
 
-	prediction = inline_predict(data, all, ec, temp_ind);
-	quad_constant = prediction - ec->topic_predictions[0];
-	linear_constant = ec->topic_predictions[0];
+	// prediction = inline_predict(data, all, ec, temp_ind);
+	// quad_constant = prediction - ec->topic_predictions[0];
+	// linear_constant = ec->topic_predictions[0];
 
 	ec->indices.erase();
 	ec->indices.push_back(left_ind);
@@ -507,11 +489,11 @@ void learn_with_output(void* d, example* ec, bool shouldOutput) {
 						f != ec->atomics[(int) (*i)[0]].end; f++) {
 					feature cf;
 
-					//cf.weight_index = f->weight_index + k * all->reg.stride;
-					cf.weight_index = quadratic_constant * (f->weight_index + k);
+					cf.weight_index = f->weight_index + k * all->reg.stride;
+					// cf.weight_index = f->weight_index + k;
 					//cout << "                   tp:"
 					//		<< ec->topic_predictions[2 * k] << endl;
-					cout << " F Index " << cf.weight_index  << endl;
+					// cout << " F Index " << cf.weight_index << endl;
 					cf.x = f->x * ec->topic_predictions[2 * k];
 					//cout << "l: " << cf.weight_index << endl;
 					ec->atomics[left_ind].push_back(cf);
@@ -529,18 +511,25 @@ void learn_with_output(void* d, example* ec, bool shouldOutput) {
 	 assert(ec->indices.size() == 1);
 	 */
 	((label_data*) ec->ld)->initial = linear_constant;
+	all->sd->contraction = data->left_contraction;
 	data->base.learn(ec);
+	data->left_contraction = all->sd->contraction;
 	((label_data*) ec->ld)->initial = 0;
 
-	//cout << "after:";
-	//debug_weights(indices, ec, all, data, mask);
+	cout << "weights after L:";
+	debug_weights(indices, ec, all, data);
 
-	 copy_array(ec->indices, indices);
-	 prediction = inline_predict(data, all, ec, temp_ind);
-	 quad_constant = prediction - ec->topic_predictions[0];
-	 linear_constant = ec->topic_predictions[0];
+	copy_array(ec->indices, indices);
+	//float prediction = inline_predict(data, all, ec, left_ind);
 
-	 cout << "after Left:" << prediction << endl;
+	//cout << "pred after Left:" << prediction << endl;
+
+}
+
+void learn_right(mf* data, vw* all, example* &ec, float linear_constant,
+		unsigned char right_ind) {
+	v_array<unsigned char> indices;
+	copy_array(indices, ec->indices);
 
 	// Learn the right part
 	ec->indices.erase();
@@ -559,10 +548,10 @@ void learn_with_output(void* d, example* ec, bool shouldOutput) {
 						f != ec->atomics[(int) (*i)[1]].end; f++) {
 					feature cf;
 
-					/*cf.weight_index = f->weight_index
-							+ (all->rank + k) * all->reg.stride;*/
+					cf.weight_index = f->weight_index
+							+ (all->rank + k) * all->reg.stride;
 
-					cf.weight_index = quadratic_constant * (f->weight_index + (all->rank + k));
+					//cf.weight_index = f->weight_index + all->rank + k;
 
 					cf.x = f->x * ec->topic_predictions[2 * k - 1];
 					ec->atomics[right_ind].push_back(cf);
@@ -573,13 +562,61 @@ void learn_with_output(void* d, example* ec, bool shouldOutput) {
 	}
 
 	((label_data*) ec->ld)->initial = linear_constant;
+	all->sd->contraction = data->right_contraction;
 	data->base.learn(ec);
+	data->right_contraction = all->sd->contraction;
 	((label_data*) ec->ld)->initial = 0;
+
+	//float prediction = inline_predict(data, all, ec, right_ind);
 
 	//cout << "after:";
 	//debug_weights(indices, ec, all, data, mask);
 
 	copy_array(ec->indices, indices);
+
+}
+void learn_with_output(void* d, example* ec, bool shouldOutput) {
+	mf* data = (mf*) d;
+	vw* all = data->all;
+
+	if (command_example(all, ec)) {
+		data->base.learn(ec);
+		return;
+	}
+
+	cout << all->weights_per_problem << endl;
+	assert(all->training);
+
+	cout << all->sd->example_number << endl;
+	unsigned char left_ind = 'a';
+	while (ec->atomics[left_ind].begin != ec->atomics[left_ind].end)
+		left_ind++;
+
+	unsigned char right_ind = left_ind + 1;
+	while (ec->atomics[right_ind].begin != ec->atomics[right_ind].end)
+		right_ind++;
+
+	unsigned char temp_ind = right_ind + 1;
+	while (ec->atomics[temp_ind].begin != ec->atomics[temp_ind].end)
+		temp_ind++;
+
+	float prediction = inline_predict(data, all, ec, temp_ind);
+	//cout << "DEBUG tp:       " << ec->topic_predictions[2] << endl;
+
+	cout << "label: " << ((label_data*) ec->ld)->label << endl;
+
+	float quad_constant = prediction - ec->topic_predictions[0];
+	float linear_constant = ec->topic_predictions[0];
+
+	cout << "before learning: " << prediction << " = (" << linear_constant
+			<< " + " << quad_constant << ")" << endl;
+
+	learn_linear(data, all, ec, quad_constant, temp_ind);
+
+	learn_left(data, all, ec, linear_constant, left_ind);
+
+	learn_right(data, all, ec, linear_constant, right_ind);
+
 	ec->final_prediction = inline_predict(data, all, ec, temp_ind);
 	cout << "after learning: " << ec->final_prediction << endl;
 
@@ -618,6 +655,10 @@ learner setup(vw& all) {
 
 	data->base = all.l;
 	data->all = &all;
+
+	data->lin_contraction = all.sd->contraction;
+	data->left_contraction = all.sd->contraction;
+	data->right_contraction = all.sd->contraction;
 
 	data->pairs = all.pairs;
 
