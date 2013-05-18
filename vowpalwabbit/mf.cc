@@ -456,7 +456,7 @@ void learn_linear(mf* data, vw* all, example* &ec, float quad_constant,
 	((label_data*) ec->ld)->initial = 0;
 
 	//cout << "DEBUG tp:       " << ec->topic_predictions[2] << endl;
-	//cout << "after Linear:" << inline_predict(data, all, ec, temp_ind) << endl;
+	cout << "after Linear:" << inline_predict(data, all, ec, temp_ind) << endl;
 
 	//debug_weights(indices, ec, all, data, mask);
 }
@@ -520,9 +520,9 @@ void learn_left(mf* data, vw* all, example* &ec, float linear_constant,
 	debug_weights(indices, ec, all, data);
 
 	copy_array(ec->indices, indices);
-	//float prediction = inline_predict(data, all, ec, left_ind);
+	float prediction = inline_predict(data, all, ec, left_ind);
 
-	//cout << "pred after Left:" << prediction << endl;
+	cout << "pred after Left:" << prediction << endl;
 
 }
 
