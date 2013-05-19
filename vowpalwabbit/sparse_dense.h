@@ -17,10 +17,12 @@ inline float trunc_weight(float w, float gravity){
 }
 
 inline void vec_add(vw& all, void* p, float fx, uint32_t fi) {
+	cout << *(float*)p << ", " << (fi & all.reg.weight_mask) << ", " << fx << "," << (all.reg.weight_vector[fi & all.reg.weight_mask] * fx) << "; ";
   *(float*)p += all.reg.weight_vector[fi & all.reg.weight_mask] * fx;
 }
 
 inline void vec_add_trunc(vw& all, void* p, float fx, uint32_t fi) {
+
   *(float*)p += trunc_weight(all.reg.weight_vector[fi & all.reg.weight_mask], (float)all.sd->gravity) * fx;
 }
 

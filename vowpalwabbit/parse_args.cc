@@ -410,6 +410,7 @@ vw* parse_args(int argc, char *argv[])
     float temp = ceilf(logf((float)(all->rank*2+1)) / logf (2.f));
     all->reg.stride = 1 << (int) temp;
     all->random_weights = true;
+    all->weights_per_problem = all->rank*2 + 1;
 
     /*
 
@@ -482,9 +483,6 @@ vw* parse_args(int argc, char *argv[])
   all->is_noop = false;
   if (vm.count("noop")) 
     all->l = NOOP::setup(*all);
-  
-  if (all->rank != 0) 
-    all->l = MF::setup(*all);
 
   all->loss = getLossFunction(all, loss_function, (float)loss_parameter);
 
@@ -640,6 +638,9 @@ vw* parse_args(int argc, char *argv[])
     all->l = CB::setup(*all, to_pass_further, vm, vm_file);
     got_cb = true;
   }
+
+  if (all->rank != 0)
+      all->l = MF::setup(*all);
 
   if (vm.count("searn") || vm_file.count("searn") ) { 
     if (vm.count("searnimp") || vm_file.count("searnimp")) {

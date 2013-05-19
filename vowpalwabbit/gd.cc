@@ -87,7 +87,10 @@ float InvSqrt(float x){
     float power_t_norm = 1.f - (all.adaptive ? all.power_t : 0.f);
     t *= powf(norm*norm,-power_t_norm);
   }
+  //cout << "**** weight before:" << w[0] << ", x:" << x << ", t:" << t << ", s->update:" << s->update << " - ";
   w[0] += s->update * x * t;
+  //cout << "**** weight after:" << w[0] << endl;
+
 }
 
 template<bool adaptive, bool normalized>
@@ -111,7 +114,10 @@ inline void specialized_update(vw& all, void* dat, float x, uint32_t fi)
   } else {
     t *= inv_norm*inv_norm; //if only using normalized updates but not adaptive, need to divide by feature norm squared
   }
+
+  //cout << "weight before:" << w[0] << ", x:" << x << ", t:" << t << ", s->update:" << s->update << " - ";
   w[0] += s->update * x * t;
+  //cout << "weight after:" << w[0] << endl;
 }
 
 void learn(void* d, example* ec)
@@ -476,8 +482,11 @@ void local_predict(vw& all, example* ec)
               norm = compute_norm<powert_norm_compute>(all,ec);
           }
           else {
-            norm = ec->total_sum_feat_sq;  
+        	  //norm = compute_norm<powert_norm_compute>(all,ec);
+        	  norm = ec->total_sum_feat_sq;
           }
+
+          //cout << "eta: " << all.eta << ", norm: " << norm << ", ppred: " << ec->partial_prediction << ", fpred: " << ec->final_prediction << ", label: " << ld->label << endl;
           eta_t = all.eta * norm * ld->weight;
           if(!all.adaptive) eta_t *= powf(t,-all.power_t);
 
@@ -487,13 +496,18 @@ void local_predict(vw& all, example* ec)
           else
             update = all.loss->getUnsafeUpdate(ec->final_prediction, ld->label, eta_t, norm);
 
+      //cout << "update: " << update << ", contraction:" << all.sd->contraction << ", eta_round: " << ((float) (update / all.sd->contraction)) << endl;
 	  ec->eta_round = (float) (update / all.sd->contraction);
 
 	  if (all.reg_mode && fabs(ec->eta_round) > 1e-8) {
 	    double dev1 = all.loss->first_derivative(all.sd, ec->final_prediction, ld->label);
 	    double eta_bar = (fabs(dev1) > 1e-8) ? (-ec->eta_round / dev1) : 0.0;
+
+	//    cout << "contraction before:" << all.sd->contraction << endl;
 	    if (fabs(dev1) > 1e-8)
 	      all.sd->contraction /= (1. + all.l2_lambda * eta_bar * norm);
+	  //  cout << fabs(dev1) << ", l2_lambda: " << all.l2_lambda << ", eta_bar: " << eta_bar << endl;
+	  //  cout << "contraction after:" << all.sd->contraction << endl;
 	    all.sd->gravity += eta_bar * sqrt(norm) * all.l1_lambda;
 	  }
 	}
@@ -509,6 +523,9 @@ void predict(vw& all, example* ex)
 {
   label_data* ld = (label_data*)ex->ld;
   float prediction;
+
+  //cout << all.reg_mode << ", " << ex->partial_prediction << ", " << prediction << endl;
+  //cout << "Weight indices: ";
   if (all.training && all.normalized_updates && ld->label != FLT_MAX && ld->weight > 0) {
     if( all.power_t == 0.5 ) {
       if (all.reg_mode % 2)
@@ -530,7 +547,10 @@ void predict(vw& all, example* ex)
       prediction = inline_predict<vec_add>(all, ex);
   }
 
+  //cout << endl;
+
   ex->partial_prediction = prediction;
+  //cout << ex->partial_prediction << endl;
 
   local_predict(all, ex);
   ex->done = true;
